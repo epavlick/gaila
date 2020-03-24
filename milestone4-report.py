@@ -243,21 +243,13 @@ def filter_mats(X, y, meta, top_words):
     m_filt = np.array(meta)[is_top]
     return X_filt, y_filt, m_filt
 
-def make_plot(X_plot, y_plot, m_plot, vocab, saveto=None, show=True, supervised=False):
-    
-    participants = [y.split(' ')[0] for y in m_plot]
-    dev = [p == '4_2b' for p in participants]
-    test = [p == '6_2c' for p in participants]
-    train = np.logical_not(np.logical_or(dev, test))
-
-    #if supervised:
-    #    reducer = LinearDiscriminantAnalysis(n_components=2)
-    #    reducer.fit(X_plot[train, :], np.array(y_plot)[train])
-    #else:
-        #reducer = TSNE(n_components=2)
-    #    reducer = TruncatedSVD(n_components=2)
-    #    red = reducer.fit(X_plot[train, :])
-    #red = reducer.transform(X_plot)
+def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None, show=True, supervised=False):
+   
+    X_plot = np.vstack((X_train, X_dev))
+    y_plot = np.concatenate((y_train, y_dev))
+    m_plot = np.concatenate((m_train, m_dev))
+    train = np.arange(len(y_train)) # indicies of train instances
+    dev = np.arange(len(y_dev)) + len(y_train) # indicies of dev instances
     reducer = TSNE(n_components=2)
     red = reducer.fit_transform(X_plot)
    
@@ -288,11 +280,10 @@ def make_plot(X_plot, y_plot, m_plot, vocab, saveto=None, show=True, supervised=
     if show:
         plt.show()
 
-def generate_report(X, y, meta, report_name, reduction=None, supervised=False, N=1):
-
+def fit_model(X, y, meta, test_part, dev_part, reduction=None, supervised=False):
     participants = [y.split(' ')[0] for y in meta]
-    dev = [p == '4_2b' for p in participants]
-    test = [p == '6_2c' for p in participants]
+    dev = [p == dev_part for p in participants]
+    test = [p == test_part for p in participants]
     train = np.logical_not(np.logical_or(dev, test))
     X_train = X[train, :]
     X_dev = X[dev, :]
@@ -300,6 +291,9 @@ def generate_report(X, y, meta, report_name, reduction=None, supervised=False, N
     y_train = np.array(y)[train]
     y_dev = np.array(y)[dev]
     y_test = np.array(y)[test]
+    m_train = np.array(meta)[train]
+    m_dev = np.array(meta)[dev]
+    m_test = np.array(meta)[test]
 
     if supervised:
         if reduction is not None:
@@ -309,18 +303,23 @@ def generate_report(X, y, meta, report_name, reduction=None, supervised=False, N
         r.fit(X_train, y_train)
         mat_train = r.transform(X_train)
         mat_dev = r.transform(X_dev)
+        mat_test = r.transform(X_test)
     else:
         if reduction is not None:
             r = TruncatedSVD(n_components=reduction) # to make as comparable as possible to LDA
             r.fit(X_train)
             mat_train = r.transform(X_train)
             mat_dev = r.transform(X_dev)
+            mat_test = r.transform(X_test)
         else:
             mat_train = X_train
             mat_dev = X_dev
-    
+            mat_test = X_test
+    return mat_train, mat_dev, mat_test, y_train, y_dev, y_test, m_train, m_dev, m_test
+
+def generate_report(mat_train, mat_dev, y_train, y_dev, report_name, N=1):
+
     nbrs = NearestNeighbors(n_neighbors=N+1).fit(mat_train)
-  
 
     for nm, mat, lbls in [("train", mat_train, y_train), ("dev", mat_dev, y_dev)]:
         report = open(report_name+"_%s.txt"%nm, 'w')
@@ -360,15 +359,28 @@ def generate_report(X, y, meta, report_name, reduction=None, supervised=False, N
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Evaluate word clusters for GAILA Milestone 4 report.')
-    parser.add_argument('--mode', type=str, default='raw', help='how to represent states, one of "raw", "endpoints", "objects", "random"')
-    parser.add_argument('--pos', type=str, default="VERB", help='which POS to use')
-    parser.add_argument('--window', type=int, default=1, help='word use +/- how many states?')
-    parser.add_argument('--k', type=int, default=2, help='how large of ngrams to use')
-    parser.add_argument('--cutoff', type=int, default=2, help='how many unique people need do actions have to occur with?')
-    parser.add_argument('--objs', type=str, default="false", help='whether to include "used objects" as features (separate from the states)')
-    parser.add_argument('--supervised', type=str, default="false", help='whether the dimensionality reduction has access to labels')
-    parser.add_argument('--reduction', type=int, default=-1, help='embedding size for dimensionality reduction or -1 if no reduction')
-    parser.add_argument('--plot', action="store_true", default=False, help='plot data')
+    parser.add_argument('--mode', type=str, default='raw',
+		    help='how to represent states, one of "raw", "endpoints", "objects", "random"')
+    parser.add_argument('--pos', type=str, default="VERB",
+		    help='which POS to use')
+    parser.add_argument('--window', type=int, default=1,
+		    help='word use +/- how many states?')
+    parser.add_argument('--k', type=int, default=2,
+		    help='how large of ngrams to use')
+    parser.add_argument('--cutoff', type=int, default=2,
+		    help='how many unique people need do actions have to occur with?')
+    parser.add_argument('--objs', type=str, default="false",
+		    help='whether to include "used objects" as features (separate from the states)')
+    parser.add_argument('--supervised', type=str, default="false",
+		    help='whether the dimensionality reduction has access to labels')
+    parser.add_argument('--reduction', type=int, default=-1,
+		    help='embedding size for dimensionality reduction or -1 if no reduction')
+    parser.add_argument('--plot', action="store_true", default=False,
+		    help='plot data')
+    parser.add_argument('--test_participant', type=str, default='6_2c',
+		    help='hold out participant for test')
+    parser.add_argument('--dev_participant', type=str, default='4_2b',
+		    help='hold out participant for dev')
 
     args = parser.parse_args()
 
@@ -376,14 +388,12 @@ if __name__ == "__main__":
     SUP = args.supervised == "true"
     RED = None if args.reduction < 0 else args.reduction
 
-    #print("Reading data...", end='')
     _data = [row for row in csv.DictReader(open('aligned_data.tsv'), delimiter='\t')]
-    #print("done.")
 
-    #print("Generating matrices...", end='')
     vocab_lsts = get_vocabs(_data, MODE=args.mode, K=args.k, CUTOFF=args.cutoff)
     X, y, meta, vocab = make_token_mats(_data, vocab_lsts[0], K = args.k,
-                                    window_size = args.window, use_objects=OBJS, mode=args.mode)
+                                    window_size = args.window, use_objects=OBJS,
+				    mode=args.mode)
 
     if args.mode == 'random':
         rows, cols = X.shape
@@ -398,17 +408,19 @@ if __name__ == "__main__":
 
     top_words = get_top_words(args.pos)
     X_filt, y_filt, m_filt = filter_mats(X, y, meta, top_words)
-    #print("done.")
 
-    name = 'pos=%s_mode=%s_obj=%s_win=%s_k=%s_reduce=%s_supervise=%s'%(args.pos, args.mode, OBJS, args.window, args.k, RED, SUP)
+    name = 'pos=%s_mode=%s_obj=%s_win=%s_k=%s_reduce=%s_supervise=%s'%(args.pos,
+		    args.mode, OBJS, args.window, args.k, RED, SUP)
 
-    #print("Running eval...", end='')
-    generate_report(X_filt, y_filt, m_filt, 'reports/%s'%name, reduction=RED, supervised=SUP)
-    #print("done.")
+    X_train, X_dev, X_test, y_train, y_dev, y_test, m_train, m_dev, m_test = fit_model(
+		    X_filt, y_filt, m_filt, args.test_participant, args.dev_participant, reduction=RED, supervised=SUP)
+
+    generate_report(X_train, X_dev, y_train, y_dev, 'reports/%s'%name)
    
     if args.plot:
         print("Generating plots...", end='')
-        make_plot(X_filt, y_filt, m_filt, vocab, saveto = 'figures/%s'%name, show = True, supervised = SUP)
+        make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev,
+			vocab, saveto = 'figures/%s'%name, show = True, supervised = SUP)
         print("done.")
 
     
