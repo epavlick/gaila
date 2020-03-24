@@ -244,7 +244,10 @@ def filter_mats(X, y, meta, top_words):
     return X_filt, y_filt, m_filt
 
 def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None, show=True, supervised=False):
-   
+  
+    #color_scale = px.colors.qualitative.Light24
+    color_scale = px.colors.qualitative.Plotly + [e for e in reversed(px.colors.qualitative.Dark24)]
+
     X_plot = np.vstack((X_train, X_dev))
     y_plot = np.concatenate((y_train, y_dev))
     m_plot = np.concatenate((m_train, m_dev))
@@ -255,7 +258,7 @@ def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None
    
     all_lemmas = [k for k,v in sorted(Counter([y.split('_')[0] for y in y_plot]).items(), key=lambda e:e[1], reverse=True)]
 
-    for split, marker, alpha, edge in [(train, 'o', 1, 'None'), (dev, 's', 1.0, 'k')]:
+    for split, marker, alpha, edge, size in [(train, 'o', 0.4, 'None', 100), (dev, 'o', 1.0, 'k', 50)]:
         y_split = np.array(y_plot)[split]
         m_split = np.array(m_plot)[split]
         lemmas = [y.split('_')[0] for y in y_split]
@@ -269,10 +272,11 @@ def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None
                  'lemmapos': y_split, 'participant': ps, 'task': ts, 'pt': pts, 'step': steps}
     
         d = pd.DataFrame.from_dict(ddict)
-        lemma_colors = [px.colors.qualitative.Light24[all_lemmas.index(l)] for l in lemmas]
-        fig = plt.scatter(d["x"], d["y"], color=lemma_colors, marker=marker, alpha=alpha, edgecolor=edge, linewidth=1)
-    
-    legend_elements = [Patch(facecolor=px.colors.qualitative.Light24[i], label=all_lemmas[i]) for i in range(len(all_lemmas))]
+        lemma_colors = [color_scale[all_lemmas.index(l)] for l in lemmas]
+        fig = plt.scatter(d["x"], d["y"], color=lemma_colors, marker=marker, alpha=alpha, edgecolor=edge, linewidth=1, s=size)
+
+    plt.xlim(np.min(red[:, 0]) - 5, np.max(red[:, 0]) + 35)
+    legend_elements = [Patch(facecolor=color_scale[i], label=all_lemmas[i]) for i in range(len(all_lemmas))]
     plt.legend(handles=legend_elements, loc='upper right', ncol=1)
 
     if saveto is not None:
@@ -377,12 +381,16 @@ if __name__ == "__main__":
 		    help='embedding size for dimensionality reduction or -1 if no reduction')
     parser.add_argument('--plot', action="store_true", default=False,
 		    help='plot data')
-    parser.add_argument('--test_participant', type=str, default='6_2c',
-		    help='hold out participant for test')
     parser.add_argument('--dev_participant', type=str, default='4_2b',
 		    help='hold out participant for dev')
+    parser.add_argument('--test_participant', type=str, default='1_1a',
+		    help='hold out participant for test')
+    parser.add_argument('--rep', type=int, default=0,
+    		    help='use to log multiple identical runs')
 
     args = parser.parse_args()
+
+    #np.random.seed(args.seed)
 
     OBJS = args.objs == "true"
     SUP = args.supervised == "true"
@@ -409,8 +417,8 @@ if __name__ == "__main__":
     top_words = get_top_words(args.pos)
     X_filt, y_filt, m_filt = filter_mats(X, y, meta, top_words)
 
-    name = 'pos=%s_mode=%s_obj=%s_win=%s_k=%s_reduce=%s_supervise=%s'%(args.pos,
-		    args.mode, OBJS, args.window, args.k, RED, SUP)
+    name = 'pos=%s_mode=%s_obj=%s_win=%s_k=%s_reduce=%s_supervise=%s_rep=%d'%(args.pos,
+		    args.mode, OBJS, args.window, args.k, RED, SUP, args.rep)
 
     X_train, X_dev, X_test, y_train, y_dev, y_test, m_train, m_dev, m_test = fit_model(
 		    X_filt, y_filt, m_filt, args.test_participant, args.dev_participant, reduction=RED, supervised=SUP)
@@ -420,7 +428,7 @@ if __name__ == "__main__":
     if args.plot:
         print("Generating plots...", end='')
         make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev,
-			vocab, saveto = 'figures/%s'%name, show = True, supervised = SUP)
+			vocab, saveto = 'figures/cluster_viz_%s'%name, show = True, supervised = SUP)
         print("done.")
 
     
