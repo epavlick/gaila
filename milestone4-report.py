@@ -17,6 +17,8 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.manifold import TSNE
 from sklearn.neighbors import NearestNeighbors
 import argparse
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 
 def make_heatmap(M, row_names, col_names, row_tots, col_tots,
                  col_cutoff = 20, row_cutoff = 20, row_scale=0.15, col_scale=0.2, cmap='coolwarm',
@@ -241,42 +243,52 @@ def filter_mats(X, y, meta, top_words):
     m_filt = np.array(meta)[is_top]
     return X_filt, y_filt, m_filt
 
-def make_plot(X_plot, y_plot, m_plot, vocab, saveto=None, show=True):
+def make_plot(X_plot, y_plot, m_plot, vocab, saveto=None, show=True, supervised=False):
+    
+    participants = [y.split(' ')[0] for y in m_plot]
+    dev = [p == '4_2b' for p in participants]
+    test = [p == '6_2c' for p in participants]
+    train = np.logical_not(np.logical_or(dev, test))
 
+    #if supervised:
+    #    reducer = LinearDiscriminantAnalysis(n_components=2)
+    #    reducer.fit(X_plot[train, :], np.array(y_plot)[train])
+    #else:
+        #reducer = TSNE(n_components=2)
+    #    reducer = TruncatedSVD(n_components=2)
+    #    red = reducer.fit(X_plot[train, :])
+    #red = reducer.transform(X_plot)
     reducer = TSNE(n_components=2)
     red = reducer.fit_transform(X_plot)
-    
-    lemmas = [y.split('_')[0] for y in y_plot]
-    pos = [y.split('_')[1] for y in y_plot]
-    ps = [y.split(' ')[0] for y in m_plot]
-    ts = [y.split(' ')[1] for y in m_plot]
-    pts = [y.rsplit(' ', 1)[0] for y in m_plot]
-    steps = [y.split(' ')[2] for y in m_plot]
-    
-    ddict = {'x': red[:,0], 'y': red[:,1], 'lemma': lemmas, 'pos': pos,
-             'lemmapos': y_plot, 'participant': ps, 'task': ts, 'pt': pts, 'step': steps}
-    
-    top_feat = [vocab[i] for i in np.argmax(X_plot, axis=1)]
-    ddict['top'] = top_feat
-        
-    feats = ['participant', 'top', 'step', 'pt'] 
-    
-    if red.shape[1] == 3:
-        ddict['z'] = red[:,2]
-        d = pd.DataFrame.from_dict(ddict)
-        fig = px.scatter_3d(d, x="x", y="y", z="z", color='lemma',
-                     hover_data=feats)
-    else:
-        d = pd.DataFrame.from_dict(ddict)
-        fig = px.scatter(d, x="x", y="y", color='lemma', hover_data=feats,
-                        color_discrete_sequence=px.colors.qualitative.Light24)
-       
-    if saveto is not None:
-        fig.write_image("%s.pdf"%saveto)
-    if show:
-        fig.show()
+   
+    all_lemmas = [k for k,v in sorted(Counter([y.split('_')[0] for y in y_plot]).items(), key=lambda e:e[1], reverse=True)]
 
-def generate_report(X, y, meta, report_name, reduction=None, supervised=False, N=5):
+    for split, marker, alpha, edge in [(train, 'o', 1, 'None'), (dev, 's', 1.0, 'k')]:
+        y_split = np.array(y_plot)[split]
+        m_split = np.array(m_plot)[split]
+        lemmas = [y.split('_')[0] for y in y_split]
+        pos = [y.split('_')[1] for y in y_split]
+        ps = [y.split(' ')[0] for y in m_split]
+        ts = [y.split(' ')[1] for y in m_split]
+        pts = [y.rsplit(' ', 1)[0] for y in m_split]
+        steps = [y.split(' ')[2] for y in m_split]
+    
+        ddict = {'x': red[split,0], 'y': red[split,1], 'lemma': lemmas, 'pos': pos,
+                 'lemmapos': y_split, 'participant': ps, 'task': ts, 'pt': pts, 'step': steps}
+    
+        d = pd.DataFrame.from_dict(ddict)
+        lemma_colors = [px.colors.qualitative.Light24[all_lemmas.index(l)] for l in lemmas]
+        fig = plt.scatter(d["x"], d["y"], color=lemma_colors, marker=marker, alpha=alpha, edgecolor=edge, linewidth=1)
+    
+    legend_elements = [Patch(facecolor=px.colors.qualitative.Light24[i], label=all_lemmas[i]) for i in range(len(all_lemmas))]
+    plt.legend(handles=legend_elements, loc='upper right', ncol=1)
+
+    if saveto is not None:
+        plt.savefig("%s.pdf"%saveto, bbox_inches="tight")
+    if show:
+        plt.show()
+
+def generate_report(X, y, meta, report_name, reduction=None, supervised=False, N=1):
 
     participants = [y.split(' ')[0] for y in meta]
     dev = [p == '4_2b' for p in participants]
@@ -356,6 +368,7 @@ if __name__ == "__main__":
     parser.add_argument('--objs', type=str, default="false", help='whether to include "used objects" as features (separate from the states)')
     parser.add_argument('--supervised', type=str, default="false", help='whether the dimensionality reduction has access to labels')
     parser.add_argument('--reduction', type=int, default=-1, help='embedding size for dimensionality reduction or -1 if no reduction')
+    parser.add_argument('--plot', action="store_true", default=False, help='plot data')
 
     args = parser.parse_args()
 
@@ -375,6 +388,13 @@ if __name__ == "__main__":
     if args.mode == 'random':
         rows, cols = X.shape
         X = np.random.rand(rows, cols)
+    
+    if args.mode == 'oracle':
+        rows, cols = X.shape
+        words = sorted(list(set(y)))
+        X = np.zeros((rows, len(words)))
+        for i, w in enumerate(y):
+            X[i, words.index(w)] = 1
 
     top_words = get_top_words(args.pos)
     X_filt, y_filt, m_filt = filter_mats(X, y, meta, top_words)
@@ -385,10 +405,11 @@ if __name__ == "__main__":
     #print("Running eval...", end='')
     generate_report(X_filt, y_filt, m_filt, 'reports/%s'%name, reduction=RED, supervised=SUP)
     #print("done.")
-    
-    #print("Generating plots...", end='')
-    #make_plot(X_filt, y_filt, m_filt, vocab, saveto = 'figures/%s'%name, show = True, supervised = SUP)
-    #print("done.")
+   
+    if args.plot:
+        print("Generating plots...", end='')
+        make_plot(X_filt, y_filt, m_filt, vocab, saveto = 'figures/%s'%name, show = True, supervised = SUP)
+        print("done.")
 
     
 
