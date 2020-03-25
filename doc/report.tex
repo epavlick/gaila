@@ -97,6 +97,8 @@ As a reminder, our raw environment data consists of 3D spatial data ($xyz$ posit
 
 We are using existing implementation of BP-AR-HMM\footnote{\url{https://github.com/michaelchughes/NPBayesHMM/blob/master/doc/QuickStartGuide.md}} and are leaving all of the parameters at their default values. In our initial explorations, we have focused only on the position of the right hand. This setup results in skills which reflect the trajectory of the hand but are not sensitive to the objects that the hand interacts with (i.e. moving a hand upward may be the same ``skill'' regardless of whether or not the hand is holding something). Thus, we follow the procedure used by \cite{george} and optionally post-process the output of the model by clustering skills instances of skills based on the objects that are closes to the hand at the skill's endpoint. Thus, depending on what knowledge we want to assume prior to word learning, we can break a single skill output from the BP-AR-HMM into multiple skills. E.g. if we assume just that the agent recognizes objects we might decompose \texttt{skill\_19}) into \texttt{skill\_19\_ending\_at\_object} and \texttt{skill\_19\_not\_ending\_at\_object};  if we assume the agent differentiates object categories we might get \texttt{skill\_19\_ending\_at\_apple},  \texttt{skill\_19\_ending\_at\_table}, etc. 
 
+The skills detected are extremely short (often lasting less than a second) and are not immediately human-interpretable. Video clips randomly sampled from a few skills can be viewed at  \url{http://dylanebert.com/nbc_actions_analysis} (password: lunar). (You will want to scroll down to the section titled ``Case Study  -  Pick'' and look at the grids of videos labelled ``Action \#, Random Instances''.) We expect we can produce more interpretable skills by tuning the parameters within the BP-AR-HMM and/or by subsampling our input to be at a lower frame rate. However, for the current analysis, we proceed with using the skills that are produced by the model ``out of the box''. 
+
 \subsubsection{Word Representation}
 
 By running the BP-AR-HMM and optionally subdividing skills based on object endpoints as just described, we can now represent our environment using sequences of discrete symbols. We therefore can approach the word learning problem using traditional NLP techniques. To do this, we look at each ``frame'' (i.e. each $\frac{1}{90}th$ of a second) and record the environment state and language observed at that instant. We then collapse consecutive frames if they contain identical observations. The result is aligned ``parallel texts'' of the form show in Table \ref{tab:aligned} for each of the 109 transcripts (18 participants $\times$ 6 tasks each) in our collected data. 
@@ -115,7 +117,7 @@ Frame & Word & Skill & Object  \\\hline
 12192   & start   &3     &  None\\
 12204   & start   &6     &  None\\
 12228   & by      &6     &  None\\
-12237   &clearing    &    6    &   None\\
+12237   & clearing    &    6    &   Lamp\\
 12249   &clearing  &      2    &   Lamp\\
 12300   &off     &2      & Lamp\\
 12335   &the     &2      & Lamp\\
@@ -126,10 +128,66 @@ Frame & Word & Skill & Object  \\\hline
 \label{tab:aligned}
 \end{table*}
 
+Given this aligned data, we generate a representation for a word using ngrams of the skills with which the word co-occurs. E.g. given the aligned representation above, and using a window of $\pm1$ and an ngram length of 3, we would represent the instance of the word \textit{clearing} at frame 12237 using the following feature vector: \{\texttt{2}=1, \texttt{6}=2, \texttt{6\_6}=1, \texttt{6\_2}=1, \texttt{6\_6\_2}=1\}. We experiment with several variations for using information about objects and endpoints in our feature vectors: \texttt{raw} which uses the skills only; \texttt{endpoints} which differentiates skills ending at objects from those which do not end at objects, but does not care about the specific object class; and \texttt{objects} which differentiates skill instances based on the specific object class at the endpoint. We also consider incorporating the object classes present in the state as part of the feature vector but divorced from the specific skills, notated as \texttt{+obj}. All of these variants are summarized in Table \ref{tab:features}. Note that while we represent object classes with words (e.g. \texttt{Lamp}) the model doesn't necessarily connect these to natural language; these object class identifiers could just as well be random IDs. 
+
+\begin{table*}[ht!]
+\centering
+\begin{tabular}{|ll|}
+\hline
+\texttt{raw} & \{\texttt{2}=1, \texttt{6}=2, \texttt{6\_6}=1, \texttt{6\_2}=1\} \\
+\texttt{endpoints} & \{\texttt{2O}=1, \texttt{6X}=1, \texttt{6O}=1, \texttt{6X\_6O}=1, \texttt{6O\_2O}=1\} \\
+\texttt{objects} & \{\texttt{2Lamp}=1, \texttt{6None}=1, \texttt{6Lamp}=1, \texttt{6None\_6Lamp}=1, \texttt{6Lamp\_2Lamp}=1\} \\
+\texttt{raw+obj} & \{\texttt{2}=1, \texttt{6}=2, \texttt{6\_6}=1, \texttt{6\_2}=1, \texttt{Lamp}=1\} \\
+\texttt{endpoints+obj} & \{\texttt{2O}=1, \texttt{6X}=1, \texttt{6O}=1, \texttt{6X\_6O}=1, \texttt{6O\_2O}=1, \texttt{Lamp}=1\} \\
+\texttt{objects+obj} & \{\texttt{2Lamp}=1, \texttt{6None}=1, \texttt{6Lamp}=1, \texttt{6None\_6Lamp}=1, \texttt{6Lamp\_2Lamp}=1, \texttt{Lamp}=1\} \\
+\hline
+\end{tabular}
+\caption{Examples of the feature vectors produced for frame 12237 (Table \ref{tab:aligned}) under each of our representation variants, using a window size of 1 and an ngram length of 2.}
+\label{tab:features}
+\end{table*}
+
+To represent a frame, we experiment with using the above sparse feature vectors as-is, as well as with applying dimensionality reduction. We additionally experiment with supervised dimensionality reduction using the language observations as class labels, as discussed in the evaluation section. 
 
 \subsection{Evaluation}
 
 \subsubsection{Clustering}
+
+For evaluation, we hold one two of our participants (one for dev, one for test) and using the remaining participants for training. We hold out participants 4\_2b and 1\_1a for dev and test, respectively, since they show the best coverage of our target vocabulary. We report results on dev only throughout this document. Coverage of target vocabulary for our dev set are shown in Table \ref{tab:dev_coverage}. 
+
+\begin{table*}[ht!]
+\centering
+\begin{tabular}{|ll|ll|}
+\hline
+\multicolumn{2}{|c}{Noun} & \multicolumn{2}{|c|}{Verb} \\
+\hline
+apple	&	8	&	close	&	0	\\
+ball	&	1	&	cook	&	0	\\
+banana	&	4	&	drop	&	0	\\
+bear	&	0	&	eat	&	6	\\
+book	&	4	&	get	&	2	\\
+bowl	&	3	&	give	&	1	\\
+chair	&	13	&	go	&	23	\\
+clock	&	1	&	hold	&	8	\\
+cup	&	22	&	open	&	0	\\
+doll	&	0	&	pick	&	1	\\
+door	&	0	&	play	&	1	\\
+fork	&	1	&	push	&	0	\\
+knife	&	1	&	put	&	20	\\
+lamp	&	0	&	shake	&	0	\\
+plant	&	7	&	stop	&	3	\\
+spoon	&	4	&	take	&	4	\\
+table	&	8	&	throw	&	2	\\
+toy	&	4	&	walk	&	1	\\
+window	&	0	&	wash	&	6	\\
+\hline
+\end{tabular}
+\caption{Occurrences of target vocabulary nouns and verbs in data from our held-out dev participant.}
+\label{tab:dev_coverage}
+\end{table*}
+
+We want a prototype that can produce appropriate words given a novel environment observation (i.e. a description of an arbitrary frame). Thus, at test time, given a frame, our prototype finds the one nearest neighbor from training and produces whichever word was used during that frame. Currently, the prototype focuses only on the target vocabulary and it differentiates between nouns and verbs (i.e. we lemmatize and POS tag all words for use in the eval). That is, when asked to produce a noun, the prototype finds the single nearest neighbor from all the training instances in which target nouns were observed (an similarly for verbs). This simplifies our evaluation against the target vocabulary, but can be relaxed going forward. 
+
+Given a frame from our dev data, we use the words uttered by the participant as ground truth labels for that frame. We report the precision of word generated by the prototype against these labels. Note this is not a perfect evaluation: the participant might say a word when its not immediately licensed by the environment as given (e.g. ``I wish I had a fork'' when no fork is present in the scene) and the participant might not say all relevant words (e.g. they may pick up a fork without saying ``I am picking up the fork''). However, most of the time, words align well with the environment state (see previous milestone report) and thus this gives us an easy way to approximate how well the prototype produces relevant words.
 
 \begin{figure*}[ht!]
 \centering
@@ -218,7 +276,15 @@ Frame & Word & Skill & Object  \\\hline
 \caption{No meaningful effect of window size or ngram length}
 \end{figure*}
 
-\subsubsection{Human Eval}
+\subsubsection{Manual Evaluation of Skills}
+
+In this evaluation, for a given selected word-action pair, the word is presented with 10 randomly sampled video segments representing the corresponding action. Words from our target vocab are used, as well as words from max-pmi action-word pairs.
+
+For each sampled video segment, I annotate whether the word matches the video. The answer choices are yes, no, or unsure. Results from the target vocab are:
+
+\begin{figure*}
+\includegraphics[width=\linewidth]{figures/human_eval}
+\end{figure*}
 
 \section{Video Retrieval} 
 \label{sec:ir}
