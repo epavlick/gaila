@@ -284,7 +284,7 @@ def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None
     if show:
         plt.show()
 
-def fit_model(X, y, meta, test_part, dev_part, reduction=None, supervised=False):
+def fit_model(X, y, meta, test_part, dev_part, dr=False, supervised=False, dim=None):
     participants = [y.split(' ')[0] for y in meta]
     dev = [p == dev_part for p in participants]
     test = [p == test_part for p in participants]
@@ -300,8 +300,8 @@ def fit_model(X, y, meta, test_part, dev_part, reduction=None, supervised=False)
     m_test = np.array(meta)[test]
 
     if supervised:
-        if reduction is not None:
-            r = LinearDiscriminantAnalysis(n_components=reduction)
+        if dr:
+            r = LinearDiscriminantAnalysis(n_components=dim)
         else:
             r = LinearDiscriminantAnalysis()
         r.fit(X_train, y_train)
@@ -309,8 +309,8 @@ def fit_model(X, y, meta, test_part, dev_part, reduction=None, supervised=False)
         mat_dev = r.transform(X_dev)
         mat_test = r.transform(X_test)
     else:
-        if reduction is not None:
-            r = TruncatedSVD(n_components=reduction) # to make as comparable as possible to LDA
+        if dr:
+            r = TruncatedSVD(n_components=dim) # to make as comparable as possible to LDA
             r.fit(X_train)
             mat_train = r.transform(X_train)
             mat_dev = r.transform(X_dev)
@@ -330,13 +330,31 @@ def generate_report(mat_train, mat_dev, y_train, y_dev, report_name, N=1):
     
         distances, indices = nbrs.kneighbors(mat)
         by_w = {}
+        cms = {}
         for i in range(mat.shape[0]):
             w = lbls[i]
             if w not in by_w:
                 by_w[w] = []
+                cms[w] = []
             neighbors = [y_train[j] for j in indices[i, 1:]]
             p = sum([1 if u == w else 0 for u in neighbors])/len(neighbors)
             by_w[w].append(p)
+            cms[w] += neighbors
+
+        all_words = sorted(cms.keys())
+        cm = np.zeros((len(all_words), len(all_words)))
+        for i, w in enumerate(all_words):
+            N = len(cms[w])
+            for j, w2 in enumerate(all_words):
+                cm[i][j] = (cms[w].count(w2))/N
+        sns.heatmap(cm, cmap="Blues", annot=True, fmt=".01f", cbar=False)
+        ticks = [w.split('_')[0] for w in all_words]
+        plt.xticks(np.arange(len(all_words))+0.5, ticks, rotation=90)
+        plt.yticks(np.arange(len(all_words))+0.5, ticks, rotation=0)
+        fig_name = report_name.replace('reports', 'figures')
+        plt.savefig(fig_name+"_cm_%s.pdf"%nm)
+        plt.clf()
+        #plt.show()
         
         macro = []
         micro = []
@@ -377,7 +395,9 @@ if __name__ == "__main__":
 		    help='whether to include "used objects" as features (separate from the states)')
     parser.add_argument('--supervised', type=str, default="false",
 		    help='whether the dimensionality reduction has access to labels')
-    parser.add_argument('--reduction', type=int, default=-1,
+    parser.add_argument('--reduction', type=str, default="false",
+		    help='whether to run dimensionality reduction')
+    parser.add_argument('--dim', type=int, default=-1,
 		    help='embedding size for dimensionality reduction or -1 if no reduction')
     parser.add_argument('--plot', action="store_true", default=False,
 		    help='plot data')
@@ -394,7 +414,7 @@ if __name__ == "__main__":
 
     OBJS = args.objs == "true"
     SUP = args.supervised == "true"
-    RED = None if args.reduction < 0 else args.reduction
+    RED = args.reduction == "true"
 
     _data = [row for row in csv.DictReader(open('aligned_data.tsv'), delimiter='\t')]
 
@@ -417,11 +437,11 @@ if __name__ == "__main__":
     top_words = get_top_words(args.pos)
     X_filt, y_filt, m_filt = filter_mats(X, y, meta, top_words)
 
-    name = 'pos=%s_mode=%s_obj=%s_win=%s_k=%s_reduce=%s_supervise=%s_rep=%d'%(args.pos,
-		    args.mode, OBJS, args.window, args.k, RED, SUP, args.rep)
+    name = 'pos=%s_mode=%s_obj=%s_win=%s_k=%s_reduce=%s_supervise=%s_dim=%s_rep=%d'%(args.pos,
+		    args.mode, OBJS, args.window, args.k, RED, SUP, args.dim, args.rep)
 
     X_train, X_dev, X_test, y_train, y_dev, y_test, m_train, m_dev, m_test = fit_model(
-		    X_filt, y_filt, m_filt, args.test_participant, args.dev_participant, reduction=RED, supervised=SUP)
+		    X_filt, y_filt, m_filt, args.test_participant, args.dev_participant, dim=args.dim, dr=RED, supervised=SUP)
 
     generate_report(X_train, X_dev, y_train, y_dev, 'reports/%s'%name)
    
