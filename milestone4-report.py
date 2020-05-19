@@ -246,7 +246,7 @@ def filter_mats(X, y, meta, top_words):
 def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None, show=True, supervised=False):
   
     #color_scale = px.colors.qualitative.Light24
-    color_scale = px.colors.qualitative.Plotly + [e for e in reversed(px.colors.qualitative.Dark24)]
+    #color_scale = px.colors.qualitative.Plotly + [e for e in reversed(px.colors.qualitative.Dark24)]
 
     X_plot = np.vstack((X_train, X_dev))
     y_plot = np.concatenate((y_train, y_dev))
@@ -272,12 +272,14 @@ def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None
                  'lemmapos': y_split, 'participant': ps, 'task': ts, 'pt': pts, 'step': steps}
     
         d = pd.DataFrame.from_dict(ddict)
-        lemma_colors = [color_scale[all_lemmas.index(l)] for l in lemmas]
-        fig = plt.scatter(d["x"], d["y"], color=lemma_colors, marker=marker, alpha=alpha, edgecolor=edge, linewidth=1, s=size)
+        #lemma_colors = [color_scale[all_lemmas.index(l)] for l in lemmas]
+        fig = plt.scatter(d["x"], d["y"])
+        #fig = plt.scatter(d["x"], d["y"], color=lemma_colors, marker=marker, alpha=alpha, edgecolor=edge, linewidth=1, s=size)
 
-    plt.xlim(np.min(red[:, 0]) - 5, np.max(red[:, 0]) + 35)
-    legend_elements = [Patch(facecolor=color_scale[i], label=all_lemmas[i]) for i in range(len(all_lemmas))]
-    plt.legend(handles=legend_elements, loc='upper right', ncol=1)
+    #plt.xlim(np.min(red[:, 0]) - 5, np.max(red[:, 0]) + 35)
+    #legend_elements = [Patch(facecolor=color_scale[i], label=all_lemmas[i]) for i in range(len(all_lemmas))]
+    #plt.legend(handles=legend_elements, loc='upper right', ncol=1)
+    plt.legend()
 
     if saveto is not None:
         plt.savefig("%s.pdf"%saveto, bbox_inches="tight")
