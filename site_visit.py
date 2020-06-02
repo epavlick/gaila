@@ -1,9 +1,10 @@
 """
 Script for generating nearest neighbors/cluster analyses for GAILA Milestone 4 report.
 """
-
+import os
 import sys
 import csv
+import random
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -144,7 +145,7 @@ def get_z(D, mode):
     return z
 
 def make_token_mats(D, _vocab, K = 1, window_size = 1, use_objects=True, mode='raw'):   
-    vocab = [v for v in _vocab if len(v.split()) <= K+1]
+    vocab = [v for v in _vocab if len(v.split()) <= K]
     if use_objects:
         objs = list(set([d['end_obj'] for d in D]))
         vocab += objs
@@ -160,7 +161,7 @@ def make_token_mats(D, _vocab, K = 1, window_size = 1, use_objects=True, mode='r
         lbls.append(w)
         meta.append(d['participant'] + ' ' + d['task'] + ' ' + '%s-%s'%(start, end))
         lower = max(0, i-window_size)
-        upper = min(i+window_size, N)
+        upper = min(i+window_size+1, N)
         for j in range(lower, upper):
             if use_objects:
                 o = D[j]['end_obj']
@@ -222,6 +223,8 @@ def get_vocabs(data, MODE='raw', K=1, CUTOFF=1):
         for w, c in sorted(v.items(), key=lambda e:e[1], reverse=True):
             if len(by_person[i][w]) >= CUTOFF:
                 vocab_lsts[i].append(w)
+    print("Action Vocab=%d; Word Vocab=%d"%(len(vocab_lsts[0]), len(vocab_lsts[1])))
+    print(random.sample(vocab_lsts[0], 10))
     return vocab_lsts
 
 def get_top_words(use_pos):
@@ -245,15 +248,15 @@ def filter_mats(X, y, meta, top_words):
 
 def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None, show=True, supervised=False):
   
-    #color_scale = px.colors.qualitative.Light24
-    #color_scale = px.colors.qualitative.Plotly + [e for e in reversed(px.colors.qualitative.Dark24)]
+    color_scale = px.colors.qualitative.Light24
+    color_scale = px.colors.qualitative.Plotly + [e for e in reversed(px.colors.qualitative.Dark24)]
 
     X_plot = np.vstack((X_train, X_dev))
     y_plot = np.concatenate((y_train, y_dev))
     m_plot = np.concatenate((m_train, m_dev))
     train = np.arange(len(y_train)) # indicies of train instances
     dev = np.arange(len(y_dev)) + len(y_train) # indicies of dev instances
-    reducer = TSNE(n_components=2)
+    reducer = TSNE(n_components=2, perplexity=50)
     red = reducer.fit_transform(X_plot)
    
     all_lemmas = [k for k,v in sorted(Counter([y.split('_')[0] for y in y_plot]).items(), key=lambda e:e[1], reverse=True)]
@@ -272,14 +275,14 @@ def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None
                  'lemmapos': y_split, 'participant': ps, 'task': ts, 'pt': pts, 'step': steps}
     
         d = pd.DataFrame.from_dict(ddict)
-        #lemma_colors = [color_scale[all_lemmas.index(l)] for l in lemmas]
-        fig = plt.scatter(d["x"], d["y"])
-        #fig = plt.scatter(d["x"], d["y"], color=lemma_colors, marker=marker, alpha=alpha, edgecolor=edge, linewidth=1, s=size)
+        lemma_colors = [color_scale[all_lemmas.index(l)] for l in lemmas]
+        #fig = plt.scatter(d["x"], d["y"])
+        fig = plt.scatter(d["x"], d["y"], color=lemma_colors, marker=marker, alpha=alpha, edgecolor=edge, linewidth=1, s=size)
 
-    #plt.xlim(np.min(red[:, 0]) - 5, np.max(red[:, 0]) + 35)
-    #legend_elements = [Patch(facecolor=color_scale[i], label=all_lemmas[i]) for i in range(len(all_lemmas))]
-    #plt.legend(handles=legend_elements, loc='upper right', ncol=1)
-    plt.legend()
+    plt.xlim(np.min(red[:, 0]) - 5, np.max(red[:, 0]) + 35)
+    legend_elements = [Patch(facecolor=color_scale[i], label=all_lemmas[i]) for i in range(len(all_lemmas))]
+    plt.legend(handles=legend_elements, loc='upper right', ncol=1)
+    #plt.legend()
 
     if saveto is not None:
         plt.savefig("%s.pdf"%saveto, bbox_inches="tight")
@@ -300,9 +303,11 @@ def fit_model(X, y, meta, test_part, dev_part, dr=False, supervised=False, dim=N
     m_train = np.array(meta)[train]
     m_dev = np.array(meta)[dev]
     m_test = np.array(meta)[test]
+    print("Number of classes = %d\nTraining size = %d x %d"%(len(set(y_train)), X_train.shape[0], X_train.shape[1]))
 
     if supervised:
         if dr:
+            #print("supervised")
             r = LinearDiscriminantAnalysis(n_components=dim)
         else:
             r = LinearDiscriminantAnalysis()
@@ -321,6 +326,8 @@ def fit_model(X, y, meta, test_part, dev_part, dr=False, supervised=False, dim=N
             mat_train = X_train
             mat_dev = X_dev
             mat_test = X_test
+    print("train acc: ", r.score(X_train, y_train))
+    print("dev acc: ", r.score(X_dev, y_dev))
     return mat_train, mat_dev, mat_test, y_train, y_dev, y_test, m_train, m_dev, m_test
 
 def generate_report(mat_train, mat_dev, y_train, y_dev, report_name, N=1):
@@ -374,7 +381,7 @@ def generate_report(mat_train, mat_dev, y_train, y_dev, report_name, N=1):
         micro_avg = sum(micro)/tot
         report.write("Macro: %.02f\n"%(macro_avg))
         report.write("Micro: %.02f\n"%(micro_avg))
-        cols = report_name.split('/')[1].split('_') 
+        cols = report_name.split('/')[-1].split('_') 
         cols = [e.split('=')[1] for e in cols]
         sys.stderr.write("%.02f\t%.02f\t%s\t%s\n"%(macro_avg, micro_avg, nm, '\t'.join(cols)))
         print("%.02f\t%.02f\t%s\t%s"%(macro_avg, micro_avg, nm, '\t'.join(cols)))
@@ -383,15 +390,17 @@ def generate_report(mat_train, mat_dev, y_train, y_dev, report_name, N=1):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Evaluate word clusters for GAILA Milestone 4 report.')
+    parser.add_argument('--aligned_data', type=str, default='aigned_data.tsv',
+    		    help='file containing aligned data')
     parser.add_argument('--mode', type=str, default='raw',
 		    help='how to represent states, one of "raw", "endpoints", "objects", "random"')
     parser.add_argument('--pos', type=str, default="VERB",
 		    help='which POS to use')
-    parser.add_argument('--window', type=int, default=1,
+    parser.add_argument('--window', type=int, default=0,
 		    help='word use +/- how many states?')
-    parser.add_argument('--k', type=int, default=2,
+    parser.add_argument('--k', type=int, default=1,
 		    help='how large of ngrams to use')
-    parser.add_argument('--cutoff', type=int, default=2,
+    parser.add_argument('--cutoff', type=int, default=0,
 		    help='how many unique people need do actions have to occur with?')
     parser.add_argument('--objs', type=str, default="false",
 		    help='whether to include "used objects" as features (separate from the states)')
@@ -418,7 +427,7 @@ if __name__ == "__main__":
     SUP = args.supervised == "true"
     RED = args.reduction == "true"
 
-    _data = [row for row in csv.DictReader(open('aligned_data.tsv'), delimiter='\t')]
+    _data = [row for row in csv.DictReader(open(args.aligned_data), delimiter='\t')]
 
     vocab_lsts = get_vocabs(_data, MODE=args.mode, K=args.k, CUTOFF=args.cutoff)
     X, y, meta, vocab = make_token_mats(_data, vocab_lsts[0], K = args.k,
@@ -432,25 +441,36 @@ if __name__ == "__main__":
     if args.mode == 'oracle':
         rows, cols = X.shape
         words = sorted(list(set(y)))
-        X = np.zeros((rows, len(words)))
+        X = np.random.rand(rows, len(words))
+        #X = np.zeros((rows, len(words)))
         for i, w in enumerate(y):
-            X[i, words.index(w)] = 1
+            X[i, words.index(w)] = 10
 
     top_words = get_top_words(args.pos)
+    #top_words = sorted(list(set(y)))
     X_filt, y_filt, m_filt = filter_mats(X, y, meta, top_words)
 
-    name = 'pos=%s_mode=%s_obj=%s_win=%s_k=%s_reduce=%s_supervise=%s_dim=%s_rep=%d'%(args.pos,
+    inp = args.aligned_data.split('.')[0].split('/')[-1]
+    repdir = 'reports/%s'%inp
+    figdir = 'figures/%s'%inp
+    if not os.path.exists(repdir):
+        os.makedirs(repdir)
+    if not os.path.exists(figdir):
+        os.makedirs(figdir)
+    name = '%s/pos=%s_mode=%s_obj=%s_win=%s_k=%s_reduce=%s_supervise=%s_dim=%s_rep=%d'%(repdir, args.pos,
+		    args.mode, OBJS, args.window, args.k, RED, SUP, args.dim, args.rep)
+    figname = '%s/pos=%s_mode=%s_obj=%s_win=%s_k=%s_reduce=%s_supervise=%s_dim=%s_rep=%d'%(figdir, args.pos,
 		    args.mode, OBJS, args.window, args.k, RED, SUP, args.dim, args.rep)
 
     X_train, X_dev, X_test, y_train, y_dev, y_test, m_train, m_dev, m_test = fit_model(
 		    X_filt, y_filt, m_filt, args.test_participant, args.dev_participant, dim=args.dim, dr=RED, supervised=SUP)
 
-    generate_report(X_train, X_dev, y_train, y_dev, 'reports/%s'%name)
+    generate_report(X_train, X_dev, y_train, y_dev, name)
    
     if args.plot:
         print("Generating plots...", end='')
         make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev,
-			vocab, saveto = 'figures/cluster_viz_%s'%name, show = True, supervised = SUP)
+			vocab, saveto = figname, show = True, supervised = SUP)
         print("done.")
 
     
