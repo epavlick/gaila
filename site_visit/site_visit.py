@@ -162,9 +162,9 @@ def load_all_spatial_data(data_dir, fnames):
                 data[(p, t)] = {}
             obj = d["name"]
             if (fnames is None) or (obj in fnames):
-                if (obj not in data[(p,t)]):
-                    data[(p,t)][obj] = {}
-                data[(p,t)][obj][d["step"]] = d
+                if (d["step"] not in data[(p,t)]):
+                    data[(p,t)][d["step"]] = {}
+                data[(p,t)][d["step"]][obj] = d
     return data
 
 def make_raw_spatial_mats(D, spatial_data, window_size=1):
