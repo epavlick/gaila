@@ -386,11 +386,11 @@ def reduce_mats(train_tup, dev_tup, test_tup, supervised=False, dim=None):
     else:
         r = TruncatedSVD(n_components=dim) # to make as comparable as possible to LDA
         r.fit(X_train)
-    mat_train = r.transform(X_train)
-    mat_dev = r.transform(X_dev)
-    mat_test = r.transform(X_test)
+    #mat_train = r.transform(X_train)
+    #mat_dev = r.transform(X_dev)
+    #mat_test = r.transform(X_test)
             
-    return mat_train, mat_dev, mat_test
+    return r #mat_train, mat_dev, mat_test
 
 def generate_report(mat_train, mat_dev, y_train, y_dev, report_name, N=1):
 
