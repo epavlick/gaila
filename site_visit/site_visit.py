@@ -22,6 +22,20 @@ from sklearn.neighbors import NearestNeighbors
 import argparse
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy.spatial.distance import euclidean
+from scipy.spatial import distance_matrix
+import plotly.express as px
+import plotly.graph_objects as go
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
+import collections
+
+class DataMat:
+    def __init__(self, _X, _y, _meta):
+        self.X = _X
+        self.y = _y
+        self.meta = _meta
 
 def make_heatmap(M, row_names, col_names, row_tots, col_tots,
                  col_cutoff = 20, row_cutoff = 20, row_scale=0.15, col_scale=0.2, cmap='coolwarm',
@@ -297,13 +311,13 @@ def get_top_words(use_pos):
             top_words.append('%s_%s'%(w, pos))
     return top_words
 
-def filter_mats(X, y, meta, top_words):
+def filter_mats(data_m, top_words):
 
-    is_top = [yy in top_words for yy in y]
-    X_filt = X[is_top, :]
-    y_filt = np.array(y)[is_top]
-    m_filt = np.array(meta)[is_top]
-    return X_filt, y_filt, m_filt
+    is_top = [yy in top_words for yy in data_m.y]
+    X_filt = data_m.X[is_top, :]
+    y_filt = np.array(data_m.y)[is_top]
+    m_filt = np.array(data_m.meta)[is_top]
+    return DataMat(X_filt, y_filt, m_filt)
 
 def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None, show=True, supervised=False):
   
@@ -348,33 +362,30 @@ def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None
     if show:
         plt.show()
 
-def train_test_split(X, y, meta, test_part, dev_part):
-    participants = [y.split(' ')[0] for y in meta]
+def train_test_split(D, test_part, dev_part):
+    participants = [y.split(' ')[0] for y in D.meta]
     dev = [p == dev_part for p in participants]
     test = [p == test_part for p in participants]
     train = np.logical_not(np.logical_or(dev, test))
-    X_train = X[train, :]
-    X_dev = X[dev, :]
-    X_test = X[test, :]
-    y_train = np.array(y)[train]
-    y_dev = np.array(y)[dev]
-    y_test = np.array(y)[test]
-    m_train = np.array(meta)[train]
-    m_dev = np.array(meta)[dev]
-    m_test = np.array(meta)[test]
+    X_train = D.X[train, :]
+    X_dev = D.X[dev, :]
+    X_test = D.X[test, :]
+    y_train = np.array(D.y)[train]
+    y_dev = np.array(D.y)[dev]
+    y_test = np.array(D.y)[test]
+    m_train = np.array(D.meta)[train]
+    m_dev = np.array(D.meta)[dev]
+    m_test = np.array(D.meta)[test]
         
-    train_tup = X_train, y_train, m_train
-    dev_tup = X_dev, y_dev, m_dev
-    test_tup = X_test, y_test, m_test
+    train = DataMat(X_train, y_train, m_train)
+    dev = DataMat(X_dev, y_dev, m_dev)
+    test = DataMat(X_test, y_test, m_test)
 
-    return train_tup, dev_tup, test_tup
+    return train, dev, test
 
-def reduce_mats(train_tup, dev_tup, test_tup, supervised=False, dim=None):
-    X_train, y_train, m_train = train_tup
-    X_dev, y_dev, m_dev = dev_tup
-    X_test, y_test, m_test = test_tup
-    sys.stderr.write("Number of classes = %d\nTraining size = %d x %d\n"%(len(set(y_train)), X_train.shape[0], X_train.shape[1]))
-    n_obs, n_feats = X_train.shape
+def reduce_mats(train, dev, test, supervised=False, dim=None):
+    sys.stderr.write("Number of classes = %d\nTraining size = %d x %d\n"%(len(set(train.y)), train.X.shape[0], train.X.shape[1]))
+    n_obs, n_feats = train.X.shape
     if dim > n_feats:
         sys.stderr.write("Warning, dim > n_feats, setting dim to n_feats (%d)\n"%(n_feats - 1))
         dim = n_feats - 1
@@ -382,15 +393,12 @@ def reduce_mats(train_tup, dev_tup, test_tup, supervised=False, dim=None):
 
     if supervised:
         r = LinearDiscriminantAnalysis(n_components=dim)
-        r.fit(X_train, y_train)
+        r.fit(train.X, train.y)
     else:
-        r = TruncatedSVD(n_components=dim) # to make as comparable as possible to LDA
-        r.fit(X_train)
-    #mat_train = r.transform(X_train)
-    #mat_dev = r.transform(X_dev)
-    #mat_test = r.transform(X_test)
+        r = TruncatedSVD(n_components=dim) 
+        r.fit(train.X)
             
-    return r #mat_train, mat_dev, mat_test
+    return r 
 
 def generate_report(mat_train, mat_dev, y_train, y_dev, report_name, N=1):
 
@@ -448,6 +456,7 @@ def generate_report(mat_train, mat_dev, y_train, y_dev, report_name, N=1):
         sys.stderr.write("%.02f\t%.02f\t%s\t%s\n"%(macro_avg, micro_avg, nm, '\t'.join(cols)))
         sys.stderr.write("%.02f\t%.02f\t%s\t%s"%(macro_avg, micro_avg, nm, '\t'.join(cols)))
         report.close()
+
 
 if __name__ == "__main__":
 
