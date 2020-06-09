@@ -1,0 +1,13 @@
+Worst-Case Baseline:	0.07
+Random Baseline:	0.22 (0.11 -- 0.38)	0.20
+Macro Avg. MRR:	0.20	0.20
+drop_VERB	0.12	0.00	2
+eat_VERB	0.33	1.00	1
+get_VERB	0.55	0.50	2
+hold_VERB	0.11	0.00	2
+pick_VERB	0.16	0.00	2
+play_VERB	0.08	0.00	2
+put_VERB	0.07	0.00	2
+take_VERB	0.07	0.00	2
+throw_VERB	0.32	0.50	2
+wash_VERB	0.17	0.00	2
