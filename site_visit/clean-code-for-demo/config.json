@@ -1,0 +1,23 @@
+{
+"MODEL_TYPE": "3d",
+"MODE" : "raw",
+"K" : 5,
+"WINDOW" : 450, 
+"CUTOFF" : 1,
+"SUP" : true,
+"RED" : true,
+"DIM" : 10,
+"DATA" : "data/partial_states_kappa=10.txt",
+"POS" : "VERB",
+"TEST" : [],
+"DEV" : ["4_2b"],
+"REP" : 53,
+"OBJS" : false,
+"PLOT" : false,
+"LOG": true,
+"FEATURES": ["trajectory", "vel_avg", "vel_var", "dist_to_head", "relPos_avg"],
+"BASIC_FEATS": [], 
+"MOST_MOVING": true,
+"OBJS": [],
+"_comment": "window is for frames in spatial data so 90 = 1 second; features are computed for only the specified objects, basic_feats are for all objects"
+}

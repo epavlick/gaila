@@ -364,8 +364,8 @@ def make_plot(X_train, y_train, m_train, X_dev, y_dev, m_dev, vocab, saveto=None
 
 def train_test_split(D, test_part, dev_part):
     participants = [y.split(' ')[0] for y in D.meta]
-    dev = [p == dev_part for p in participants]
-    test = [p == test_part for p in participants]
+    dev = [p in dev_part for p in participants]
+    test = [p in test_part for p in participants]
     train = np.logical_not(np.logical_or(dev, test))
     X_train = D.X[train, :]
     X_dev = D.X[dev, :]
